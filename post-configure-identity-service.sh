@@ -14,7 +14,7 @@ if netstat -ant | grep 5000; then
   USER_DIR=/root
 
   sed -i "s/KEYSTONE_URL/http:\/\/${PUBLIC_HOSTNAME}:35357\/v2.0/" $USER_DIR/keystonerc
-  sed -i "s/ENGINE_HOSTNAME/$PUBLIC_HOSTNAME/g" $USER_DIR/keystonerc
+  sed -i "s/ENGINE_HOSTNAME/${PUBLIC_HOSTNAME}/g" $USER_DIR/keystonerc
   cat $USER_DIR/keystonerc
 
   . $USER_DIR/keystonerc
@@ -35,13 +35,13 @@ if netstat -ant | grep 5000; then
     keystone service-delete $id; 
   done
 
-  /root/configure-identity-service
+  /root/configure-identity-service.sh
 
   echo "
     Use the following settings to connect OpenStack:
   "
-  sed -i "s/KEYSTONE_URL/http:\/\/${PUBLIC_HOSTNAME}:35357\/v2.0/" $USER_DIR/clientrc
-  sed -i "s/ENGINE_HOSTNAME/$PUBLIC_HOSTNAME/g" $USER_DIR/clientrc
+  sed -i "s/KEYSTONE_URL/http:\/\/${PUBLIC_HOSTNAME}:35357\/v2.0/g" $USER_DIR/clientrc
+  sed -i "s/ENGINE_HOSTNAME/${PUBLIC_HOSTNAME}/g" $USER_DIR/clientrc
 
   cat $USER_DIR/clientrc
 

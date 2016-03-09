@@ -17,8 +17,11 @@ EXPOSE 8000
 EXPOSE 8003
 EXPOSE 8004
 EXPOSE 5000
+EXPOSE 5672
 
 EXPOSE 22
+
+ENV PUBLIC_HOSTNAME ${PUBLIC_HOSTNAME:-$HOSTNAME}
 
 RUN cd /tmp/ibm-ucd-patterns-install/engine-install && \
 JAVA_HOME=/tmp/ibm-ucd-patterns-install/engine-install/media/engine/java/jre \

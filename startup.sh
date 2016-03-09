@@ -31,7 +31,7 @@ fi
 env
  
 sed -i "s/ENGINE_HOSTNAME/$PUBLIC_HOSTNAME/g" /etc/heat/heat.conf
-sed -i "s/\(allowed_auth_uris=\).*\$/\1http:\/\/${PUBLIC_HOSTNAME}:5000\/v2.0,${ALLOWED_AUTH_URIS}/" /etc/heat/heat.conf
+sed -i "s|\(allowed_auth_uris=\).*\$|\1http:\/\/${PUBLIC_HOSTNAME}:5000\/v2.0,${ALLOWED_AUTH_URIS}|g" /etc/heat/heat.conf
  
 #chmod u+x /root/post-configure-identity-service.sh
 mkdir /root/.qpidd
