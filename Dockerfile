@@ -10,8 +10,22 @@ RUN /usr/bin/yum -y update && \
   /usr/bin/yum -y install tar gzip logrotate && \
   yum clean packages
   
+RUN yum -y groupinstall "Development tools"
 
-RUN yum install -y gcc gcc-c++ kernel-devel mysql-devel python-devel
+RUN yum install -y gcc gcc-c++ kernel-devel mysql-devel python-devel zlib-devel bzip2-devel openssl-devel ncurses-devel sqlite-devel readline-devel tk-devel
+
+RUN cd /opt && \
+  wget --no-check-certificate https://www.python.org/ftp/python/2.7.10/Python-2.7.10.tgz && \
+  tar xzf Python-2.7.10.tgz && \
+  cd Python-2.7.10 && \
+  ./configure --prefix=/usr/local && \
+  make && \
+  make install
+
+RUN cd /opt && \
+  wget --no-check-certificate https://bootstrap.pypa.io/get-pip.py && \
+  python get-pip.py && \
+  pip install MySQL-python
 
 EXPOSE 8000
 EXPOSE 8003

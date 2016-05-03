@@ -3,6 +3,8 @@
 !.gitignore
 !.git*
 
+build.rc
+
 # ignore all temporary files and ahp specific files
 *.bak
 *.bom
