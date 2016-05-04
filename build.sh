@@ -24,6 +24,8 @@ echo "artifact url: $ARTIFACT_URL"
 echo "ucd version:  $UCD_ENG_VERSION"
 echo "ucd download url: $UCD_ENG_DOWNLOAD_URL"
 
+mkdir -p artifacts/
+
 curl -O UCD_ENG_DOWNLOAD_URL
 tar xvzf ibm-ucd-patterns-engine.tgz -C artifacts/
 rm -f ibm-ucd-patterns-engine.tgz
