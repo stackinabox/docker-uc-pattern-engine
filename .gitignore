@@ -2,6 +2,7 @@
 .*
 !.gitignore
 !.git*
+!.travis.yml
 
 build.rc
 
