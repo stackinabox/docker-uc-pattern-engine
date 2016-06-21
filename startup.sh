@@ -34,6 +34,6 @@ sed -i "s/ENGINE_HOSTNAME/$PUBLIC_HOSTNAME/g" /etc/heat/heat.conf
 sed -i "s|\(allowed_auth_uris=\).*\$|\1http:\/\/${PUBLIC_HOSTNAME}:5000\/v2.0,${ALLOWED_AUTH_URIS}|g" /etc/heat/heat.conf
  
 #chmod u+x /root/post-configure-identity-service.sh
-mkdir /root/.qpidd
+mkdir -p /root/.qpidd
 
-/usr/bin/supervisord -c /etc/supervisord.conf
+/usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
