@@ -1,16 +1,11 @@
-FROM centos:6
+FROM centos/systemd
 
 MAINTAINER Tim Pouyer <tpouyer@us.ibm.com>
+MAINTAINER Sudhakar Frederick <sudhakar@au1.ibm.com>
 
-# Pass in the location of the UCD agent install zip 
-ARG ARTIFACT_DOWNLOAD_URL 
-ARG ARTIFACT_VERSION
+ARG ARTIFACT_DOWNLOAD_URL
 
-# Add startup.sh script and addtional supervisord config
-ADD startup.sh /opt/startup.sh
-ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-ADD post-configure-identity-service.sh /root/post-configure-identity-service.sh
+ADD postconfig /opt/postconfig
 
 ENV PUBLIC_HOSTNAME=${PUBLIC_HOSTNAME:-$HOSTNAME} \
     ALLOWED_AUTH_URIS=${ALLOWED_AUTH_URIs:-}
@@ -22,35 +17,41 @@ EXPOSE 5000
 EXPOSE 5672
 
 RUN /usr/bin/yum -y update && \
-  /usr/bin/yum -y install wget \
+  /usr/bin/yum -y install which \
+                  wget \
                   unzip \
                   git \
                   tar \
                   gzip \
                   logrotate \
+                  net-tools \
                   python-setuptools \
                   gcc \
-                  gcc-c++ \
-                  mysql-devel \
-                  python-devel && \
-  /usr/bin/easy_install supervisor && \
+                  gcc-c++ && \
   wget --no-check-certificate https://bootstrap.pypa.io/get-pip.py && \
   python get-pip.py && \
-  pip install MySQL-python && \
+  pip install --upgrade pip
+
+#use this when testing local
+#ADD ibm-ucd-patterns-engine-6.2.1.2.801498.tgz /tmp/
+
+RUN  ls -l /opt/postconfig && \
   wget -O - $ARTIFACT_DOWNLOAD_URL | tar zxf - -C /tmp/ && \
+  rm -f /tmp/ibm-ucd-patterns-install/engine-install/media/build.gradle && \
+  cp /opt/postconfig/build.gradle /tmp/ibm-ucd-patterns-install/engine-install/media/build.gradle && \
   cd /tmp/ibm-ucd-patterns-install/engine-install && \
   JAVA_HOME=/tmp/ibm-ucd-patterns-install/engine-install/media/engine/java/jre \
   JAVA_OPTS=" -Dlicense.accepted=Y -Dinstall.engine.dependencies.installed=Y \
+  -Dinstall.engine.start.services=No \
   -Dinstall.engine.keystone.url=KEYSTONE_URL \
   -Dinstall.engine.public.hostname=ENGINE_HOSTNAME \
   -Dinstall.engine.bind.addr=0.0.0.0" \
-  ./gradlew -sSq install && \
-  cp /tmp/ibm-ucd-patterns-install/engine-install/media/engine/bin/configure-identity-service.sh /root/configure-identity-service.sh && \
+  ./gradlew -sSq configure installPatternServices configureMySQLPythonDependencies installIdentityServices configureIdentityService  && \
   rm -rf /tmp/ibm-ucd-patterns-install && \
-  /usr/bin/yum clean packages
+  /usr/bin/yum clean packages && \
+  cp /opt/postconfig/init-heat.service /etc/systemd/system/init-heat.service && \
+  systemctl enable init-heat && \
+  systemctl enable mariadb && \
+  systemctl enable rabbitmq-server
 
-ENTRYPOINT ["/opt/startup.sh"] 
-CMD []
-
-
-
+CMD ["/usr/sbin/init"]
