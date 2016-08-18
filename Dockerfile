@@ -54,4 +54,5 @@ RUN  ls -l /opt/postconfig && \
   systemctl enable mariadb && \
   systemctl enable rabbitmq-server
 
+VOLUME ["/root/envvars.txt"]
 CMD ["/usr/sbin/init"]
