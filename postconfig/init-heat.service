@@ -1,0 +1,11 @@
+[Unit]
+Description=Initialise Heat engine
+After=network.target rabbitmq-server.service mariadb.service
+
+[Service]
+EnvironmentFile=/root/envvars.txt
+ExecStart=/opt/postconfig/startup.sh
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target
