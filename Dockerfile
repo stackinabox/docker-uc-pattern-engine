@@ -30,13 +30,13 @@ RUN /usr/bin/yum -y update && \
                   gcc-c++ && \
   wget --no-check-certificate https://bootstrap.pypa.io/get-pip.py && \
   python get-pip.py && \
-  pip install --upgrade pip
+  pip install --upgrade pip && \
+  chmod +x /opt/postconfig/*.sh
 
 #use this when testing local
 #ADD ibm-ucd-patterns-engine-6.2.1.2.801498.tgz /tmp/
 
-RUN  ls -l /opt/postconfig && \
-  wget -O - $ARTIFACT_DOWNLOAD_URL | tar zxf - -C /tmp/ && \
+RUN  wget -O - $ARTIFACT_DOWNLOAD_URL | tar zxf - -C /tmp/ && \
   rm -f /tmp/ibm-ucd-patterns-install/engine-install/media/build.gradle && \
   cp /opt/postconfig/build.gradle /tmp/ibm-ucd-patterns-install/engine-install/media/build.gradle && \
   cd /tmp/ibm-ucd-patterns-install/engine-install && \
