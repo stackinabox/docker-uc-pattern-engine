@@ -31,7 +31,7 @@ RUN /usr/bin/yum -y update && \
   wget --no-check-certificate https://bootstrap.pypa.io/get-pip.py && \
   python get-pip.py && \
   pip install --upgrade pip && \
-  chmod +x /opt/postconfig/*.sh && \
+  chmod +x /opt/postconfig/*.sh
 
 #use this when testing local
 #ADD ibm-ucd-patterns-engine-6.2.1.2.801498.tgz /tmp/
