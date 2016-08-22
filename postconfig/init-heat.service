@@ -6,6 +6,8 @@ After=network.target rabbitmq-server.service mariadb.service
 EnvironmentFile=/root/envvars.txt
 ExecStart=/opt/postconfig/startup.sh
 Type=oneshot
+StandardOutput=syslog+console
+StandardError=syslog+console
 
 [Install]
 WantedBy=multi-user.target
