@@ -4,6 +4,7 @@ MAINTAINER Tim Pouyer <tpouyer@us.ibm.com>
 MAINTAINER Sudhakar Frederick <sudhakar@au1.ibm.com>
 
 ARG ARTIFACT_DOWNLOAD_URL
+ARG ARTIFACT_VERSION
 
 ADD postconfig /opt/postconfig
 
