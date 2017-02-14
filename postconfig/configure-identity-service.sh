@@ -77,12 +77,12 @@ if [ -z "$KEYSTONE_UUID" ]; then
   echo "ERROR: Problem registering Openstack Identity Service. Please check your configuration and make verify required updates after installation completes."
 else
   echo "Found Keystone Services: $KEYSTONE_UUID"
-  openstack endpoint create --region RegionOne identity admin http://$PUBLIC_HOSTNAME:35357/v2.0
-  openstack endpoint create --region RegionOne identity public http://$PUBLIC_HOSTNAME:5000/v2.0
-  openstack endpoint create --region RegionOne identity internal http://$PUBLIC_HOSTNAME:5000/v2.0
-  openstack endpoint create --region RegionOne identity admin http://$PUBLIC_HOSTNAME:35357/v3
-  openstack endpoint create --region RegionOne identity public http://$PUBLIC_HOSTNAME:5000/v3
-  openstack endpoint create --region RegionOne identity internal http://$PUBLIC_HOSTNAME:5000/v3
+  openstack endpoint create --region RegionOne identity admin http://$PUBLIC_HOSTNAME/identity_v2_admin
+  openstack endpoint create --region RegionOne identity public http://$PUBLIC_HOSTNAME/identity
+  openstack endpoint create --region RegionOne identity internal http://$PUBLIC_HOSTNAME/identity
+  openstack endpoint create --region RegionOne identity admin http://$PUBLIC_HOSTNAME/identity_v3_admin
+  openstack endpoint create --region RegionOne identity public http://$PUBLIC_HOSTNAME/identity/v3
+  openstack endpoint create --region RegionOne identity internal http://$PUBLIC_HOSTNAME/identity/v3
 fi
 HEAT_UUID=$(openstack service list | grep orchestration | cut -d " " -f 2 | head -n 1)
 if [ -z "$HEAT_UUID" ]; then

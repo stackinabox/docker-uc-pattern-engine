@@ -1,0 +1,52 @@
+version: '2'
+services:
+  heatdb:
+    image: mariadb
+    container_name: heatdb
+    environment:
+      MYSQL_USER: heat
+      MYSQL_ROOT_PASSWORD: passw0rd
+      MYSQL_PASSWORD: heat
+      MYSQL_DATABASE: heat
+  keystonedb:
+    image: mariadb
+    container_name: keystonedb
+    environment:
+      MYSQL_USER: keystone
+      MYSQL_ROOT_PASSWORD: passw0rd
+      MYSQL_PASSWORD: keystone
+      MYSQL_DATABASE: keystone
+  rabbitmq:
+    image: rabbitmq:3
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+  engine:
+    image: stackinabox/urbancode-patterns-engine:6.2.3.0.867486
+    container_name: heat
+    environment:
+      ALLOWED_AUTH_URIS: http://example:5000/v3
+      IDENTITY_ADMIN_PASSWORD: openstack1
+      HEAT_USER_PASSWORD: openstack1
+      DEFAULT_EMAIL_ADDR: undefined@host.com
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWD: guest
+      KEYSTONE_DB_HOST: keystonedb
+      KEYSTONE_DB_PASSWD: keystone
+      HEAT_DB_HOST: heatdb
+      HEAT_DB_PASSWD: heat
+      TERM: xterm
+    extra_hosts:
+    - "HOST_PUBLIC_IP_ADDRESS:192.168.99.100"
+    links:
+    - heatdb:heatdb
+    - keystonedb:keystonedb
+    - rabbitmq:rabbitmq
+    ports:
+    - "8000:8000"
+    - "8003:8003"
+    - "8004:8004"
+    - "5000:5000"
+    - "35357:35357"

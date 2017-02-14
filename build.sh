@@ -19,8 +19,12 @@ echo "artifact stream url: $ARTIFACT_URL/$ARTIFACT_STREAM.txt"
 echo "artifact version:  $ARTIFACT_VERSION"
 echo "artifact download url: $ARTIFACT_DOWNLOAD_URL"
 
-docker login -e="$DOCKER_EMAIL" -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
-docker build -t stackinabox/urbancode-patterns-engine:$ARTIFACT_VERSION \
-                --build-arg ARTIFACT_DOWNLOAD_URL=$ARTIFACT_DOWNLOAD_URL \
-                --build-arg ARTIFACT_VERSION=$ARTIFACT_VERSION .
-docker push stackinabox/urbancode-patterns-engine:$ARTIFACT_VERSION
+docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
+docker build --tag="stackinabox/urbancode-patterns-engine:$ARTIFACT_STREAM" \
+             --tag="stackinabox/urbancode-patterns-engine:$ARTIFACT_VERSION" \
+             --build-arg ARTIFACT_DOWNLOAD_URL=$ARTIFACT_DOWNLOAD_URL \
+             --build-arg ARTIFACT_VERSION=$ARTIFACT_VERSION .
+
+if [ -n "$PUBLISH" ]; then
+    docker push stackinabox/urbancode-patterns-engine:$ARTIFACT_VERSION
+fi

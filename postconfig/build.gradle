@@ -20,7 +20,7 @@ def INSTALL_PKG_AMQP = "rabbitmq-server"
 def AMQP_PROVIDER_DAEMON=INSTALL_PKG_AMQP
 
 def openstackVersion = OPENSTACK_VERSION_KILO
-def releaseVersion = "6.2.1.2"
+def releaseVersion = "6.2.2.0"
 
 def doUpgrade = false
 def backup_heat_config = null
