@@ -1,4 +1,6 @@
-### docker-uc-pattern-engine
+[![Build Status](https://travis-ci.org/stackinabox/docker-uc-pattern-engine.svg?branch=master)](https://travis-ci.org/stackinabox/docker-uc-pattern-engine)
+
+## docker-uc-pattern-engine
 
 builds a docker image with UrbanCode Deploy with Patterns HEAT engine (and plugin extensions)
 
