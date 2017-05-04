@@ -5,7 +5,7 @@
 ####
 ARTIFACT_URL=${ARTIFACT_URL:-http://artifacts.stackinabox.io/urbancode/ibm-ucd-patterns-engine}
 
-source ./build.rc
+#source ./build.rc
 
 ####
 # ARTIFACT_VERSION will be read from the stream file on the artifact server so no need to set it
