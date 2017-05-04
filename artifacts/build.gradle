@@ -1,0 +1,483 @@
+/*
+ * Licensed Materials - Property of IBM Corp.
+ * IBM UrbanCode Deploy
+ * (c) Copyright IBM Corporation 2011, 2015. All Rights Reserved.
+ *
+ * U.S. Government Users Restricted Rights - Use, duplication or disclosure restricted by
+ * GSA ADP Schedule Contract with IBM Corp.
+ */
+
+def OPENSTACK_VERSION_ICEHOUSE="icehouse"
+def OPENSTACK_VERSION_JUNO="juno"
+def OPENSTACK_VERSION_KILO="kilo"
+// The following OpenStack releases are not supported by the product yet.
+def OPENSTACK_VERSION_LIBERTY="liberty"
+def OPENSTACK_VERSION_MITAKA="mitaka"
+
+def INSTALL_PKG_DATABASE = "mariadb-server"
+def INSTALL_PKG_AMQP = "rabbitmq-server"
+
+def AMQP_PROVIDER_DAEMON=INSTALL_PKG_AMQP
+
+def openstackVersion = OPENSTACK_VERSION_KILO
+def releaseVersion = "6.2.3.0"
+
+def doUpgrade = false
+def backup_heat_config = null
+
+def isYes = { answer -> ["Y", "YES", "true", "True", "TRUE"].find{ it.equalsIgnoreCase(answer) } != null }
+
+if(OPENSTACK_VERSION_ICEHOUSE == openstackVersion) {
+    INSTALL_PKG_AMQP="qpid-cpp-server qpid-tools"
+    AMQP_PROVIDER_DAEMON="qpidd"
+}
+
+def binDir = file("engine/bin").absolutePath
+def pluginTmpDir = file("/tmp/ibm-heat-plugins-install").absolutePath
+def cloudExtArchive = "ibm-cloud-ext-${releaseVersion}.plugin.tar.gz"
+def swOrchArchive = "ibm-sw-orch-${releaseVersion}.plugin.tar.gz"
+
+task acceptLicense(type: AcceptLicenseTask) {}
+
+task openstackRelease(type: OpenstackReleaseTask) {}
+
+task prompt(type: InstallEngineTask, dependsOn: acceptLicense) {}
+
+task configureMediaRepository(dependsOn: prompt) << {
+
+    ant.copy(todir: "/etc/yum.repos.d", overwrite: 'true', encoding: "UTF-8") {
+        fileset(dir: file("engine/templates/heat-config").absolutePath) {
+            include(name: "*.repo")
+        }
+        filterset {
+            filter(token: "INSTALLED_REPO_DIRECTORY", value: file("engine/rhel7.1").absolutePath)
+        }
+    }
+    ant.chmod(dir: file("engine/bin").absolutePath, perm: "+x") { include(name: "configure-*.sh") }
+}
+
+task installDatabaseBackendServices(type:Exec, dependsOn: configureMediaRepository) {
+    workingDir = file("${binDir}")
+
+    executable '/bin/sh'
+    args '-c', "yum -y --nogpgcheck install ${INSTALL_PKG_DATABASE}"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task installMessagingBackendServices(type:Exec, dependsOn: configureMediaRepository) {
+    workingDir = file("${binDir}")
+
+    executable '/bin/sh'
+    args '-c', "yum -y --nogpgcheck install ${INSTALL_PKG_AMQP}"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task installPatternServices(type:Exec, dependsOn: [configureMediaRepository, installMessagingBackendServices, installDatabaseBackendServices]) {
+    workingDir = file("${binDir}")
+
+    executable '/bin/sh'
+    args '-c', 'yum -y --nogpgcheck install keystonemiddleware openstack-heat python-openstackclient python-heatclient openstack-utils'
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task configurePluginPythonDependencies(type:Exec, dependsOn: acceptLicense) {
+    workingDir = file("${binDir}")
+
+    executable '/bin/sh'
+    args '-c', "${binDir}/configure-plugin-python-modules.sh"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task configureMySQLPythonDependencies(type:Exec, dependsOn: [installDatabaseBackendServices, configurePluginPythonDependencies]) {
+    workingDir = file("${binDir}")
+    executable '/bin/sh'
+    args '-c', "${binDir}/configure-mysql-python-module.sh"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task configureBackendServices(type:Exec,
+                              dependsOn: [installDatabaseBackendServices, installMessagingBackendServices, configureMySQLPythonDependencies]) {
+    environment OPENSTACK_VERSION: openstackVersion
+    executable '/bin/sh'
+    args '-c', "exit 0 ; ${binDir}/configure-backend-services.sh"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task extractPluginArchives(dependsOn: [configurePluginPythonDependencies])  <<  {
+    delete(pluginTmpDir)
+    ant.mkdir(dir: pluginTmpDir)
+    println "Installing plugins for OpenStack"
+    cloudExtArchive = "ibm-cloud-ext-${releaseVersion}.plugin.tar.gz"
+    swOrchArchive = "ibm-sw-orch-${releaseVersion}.plugin.tar.gz"
+    println("\n--------------------------------------------------------------------------------")
+    println("Extracting plugins into ${pluginTmpDir}")
+    copy {
+        from tarTree(resources.gzip(file("engine/plugins/${cloudExtArchive}")))
+        into pluginTmpDir
+    }
+    copy {
+        from tarTree(resources.gzip(file("engine/plugins/${swOrchArchive}")))
+        into pluginTmpDir
+    }
+    println("Done.")
+    println("\n--------------------------------------------------------------------------------")
+}
+
+task installCloudExtPlugin(type:Exec, dependsOn: [extractPluginArchives]) {
+    executable '/bin/sh'
+    args '-c', "pip install -U ${pluginTmpDir}/ibm-cloud-ext-${releaseVersion}.tar.gz"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task installSwOrchPlugin(type:Exec, dependsOn: [extractPluginArchives]) {
+    executable '/bin/sh'
+    args '-c', "pip install -U ${pluginTmpDir}/ibm-sw-orch-${releaseVersion}.tar.gz"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task configurePluginPythonDependenciesPost(type:Exec, dependsOn: [installCloudExtPlugin, installSwOrchPlugin]) {
+    workingDir = file("${binDir}")
+    executable '/bin/sh'
+    args '-c', "${binDir}/configure-plugin-python-modules-post.sh"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task installPlugins(dependsOn: [acceptLicense, configurePluginPythonDependenciesPost]) <<
+{
+    def pluginInstallDir = '/usr/lib/heat'
+    ant.chown(file: pluginInstallDir, owner: 'heat', verbose: true)
+    ant.chmod(dir: file(pluginInstallDir).absolutePath, perm: "+r") { include(name: "**/*") }
+}
+
+task installPluginsExtend(dependsOn: [openstackRelease, configurePluginPythonDependenciesPost]) <<
+{
+    def pluginInstallDir = '/usr/lib/heat'
+    ant.chown(file: pluginInstallDir, owner: 'heat', verbose: true)
+    ant.chmod(dir: file(pluginInstallDir).absolutePath, perm: "+r") { include(name: "**/*") }
+}
+
+task patchHeatEngine(dependsOn: [installPatternServices]) << {
+    if(openstackVersion == OPENSTACK_VERSION_ICEHOUSE) {
+        println("\n--------------------------------------------------------------------------------")
+        println("Patching clients.py due to known issue with Icehouse release...")
+        ant.copy(file: file("engine/templates/heat-config/clients.icehouse.py").absolutePath, overwrite: 'true', encoding: "UTF-8",
+            tofile: "/usr/lib/python2.6/site-packages/heat/engine/clients.py") {
+        }
+        println("Done.")
+        println("\n--------------------------------------------------------------------------------")
+    }
+
+    if(openstackVersion == OPENSTACK_VERSION_JUNO){
+        println("\n--------------------------------------------------------------------------------")
+        println("Patching heat_keystoneclient.py due to known issue with Juno release...")
+        ant.copy(file: file("engine/templates/heat-config/heat_keystoneclient.juno.py").absolutePath, overwrite: 'true', encoding: "UTF-8",
+            tofile: "/usr/lib/python2.6/site-packages/heat/common/heat_keystoneclient.py") {
+        }
+        println("Done.")
+        println("\n--------------------------------------------------------------------------------")
+
+    }
+    if(openstackVersion == OPENSTACK_VERSION_KILO){
+        println("\n--------------------------------------------------------------------------------")
+        println("Installing heat_keystoneclientv2.py python class for backwards compatibility...")
+        ant.copy(file: file("engine/templates/heat-config/heat_keystoneclientv2.kilo.py").absolutePath, overwrite: 'true', encoding: "UTF-8",
+            tofile: "/usr/lib/python2.7/site-packages/heat/common/heat_keystoneclientv2.py") {
+        }
+        println("Done.")
+        println("\n--------------------------------------------------------------------------------")
+    }
+    println("Done.")
+    println("\n--------------------------------------------------------------------------------")
+}
+
+task patchStandaloneEngine(type:Exec,dependsOn: [patchHeatEngine]) {
+    executable '/bin/sh'
+    args '-c', "${binDir}/patch-standalone-engine.sh"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task configurePolicies(type:Exec,dependsOn: [patchStandaloneEngine]) {
+    executable '/bin/sh'
+    args '-c', "${binDir}/configure-policies.sh"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task extendEngine(dependsOn: [installPluginsExtend]) <<
+{
+
+    println("\n--------------------------------------------------------------------------------")
+    println("All plugins have been installed into /usr/lib/heat."
+            + "\nYou must restart the pattern engine services from your console using the "
+            + "\nfollowing commands:\n"
+            + "\n\tsystemctl restart  openstack-heat-engine.service\n"
+            + "\n\tsystemctl restart  openstack-heat-api.service\n"
+            )
+    println("\n--------------------------------------------------------------------------------")
+}
+
+task configure(dependsOn: [
+    prompt,
+    configureBackendServices,
+    patchStandaloneEngine,
+    installPlugins,
+    configurePolicies
+]) << {
+
+    def sqlConx = "mysql://heat:heat@127.0.0.1:3306/heat?charset=utf8"
+    def hostname = System.getProperties().get("install.engine.public.hostname")
+    def bindHostname = System.getProperties().get("install.engine.bind.addr")
+    def cfnAPIPort = "8000"
+    def cloudWatchPort = "8003"
+    def heatAPIPort = "8004"
+    def cfnAPIPath = "/v1"
+
+    def allowedAuthURIs = System.getProperties().get("install.engine.keystone.url", "http://localhost:5000/v3")
+
+    def amqpHost = hostname
+    def amqpPort = 5672
+    def amqpUser = "guest"
+    def amqpPassword = "guest"
+    def rabbitmqVirtualHost = "/"
+
+    def heatServiceUserId = "heat"
+    def heatServicePassword = "openstack-orchestration"
+    def heatServiceProject = "service"
+
+    def adminPassword = "openstack1"
+    def clientHeatUrl = "http://${hostname}:${heatAPIPort}/v1/%(tenant_id)s"
+    // hostname = java.net.InetAddress.getLocalHost().getHostAddress();
+    File etcDir = new File("/etc/heat")
+    def index = 1;
+    if(etcDir.exists() && etcDir.canRead()) {
+        File[] heatConfs = etcDir.listFiles(new FileFilter() {
+            public boolean accept(File pathname) {
+                if(pathname.getName().startsWith("heat.conf")) {
+                    return true;
+                }
+                return false;
+            }
+        })
+        index = heatConfs.length + 1
+    }
+    if(new File("/etc/heat/heat.conf").exists()) {
+        doUpgrade=true
+        ant.copy(file: file("/etc/heat/heat.conf").absolutePath, overwrite: 'true', encoding: "UTF-8",
+            tofile: "/etc/heat/heat.conf.backup.${index}")
+        backup_heat_config = "/etc/heat/heat.conf.backup.${index}"
+    }
+
+    ant.copy(file: file("engine/templates/heat-config/heat.conf.${openstackVersion}").absolutePath, overwrite: 'true', encoding: "UTF-8",
+             tofile: "/etc/heat/heat.conf") {
+        filterset {
+            filter(token: "SQL_CONNECTION", value: sqlConx)
+            filter(token: "HEAT_API_ENDPOINT.HOST", value: hostname)
+            filter(token: "HEAT_API_ENDPOINT.PORT", value: heatAPIPort)
+            filter(token: "HEAT_API_ENDPOINT.BIND_HOST", value: bindHostname)
+            filter(token: "HEAT_API_CFN_ENDPOINT.HOST", value: hostname)
+            filter(token: "HEAT_API_CFN_ENDPOINT.BIND_HOST", value: bindHostname)
+            filter(token: "HEAT_API_CFN_ENDPOINT.PORT", value: cfnAPIPort)
+            filter(token: "HEAT_API_CFN_ENDPOINT.PATH", value: cfnAPIPath)
+            filter(token: "HEAT_API_CLOUDWATCH_ENDPOINT.HOST", value: hostname)
+            filter(token: "HEAT_API_CLOUDWATCH_ENDPOINT.BIND_HOST", value: bindHostname)
+            filter(token: "HEAT_API_CLOUDWATCH_ENDPOINT.PORT", value: cloudWatchPort)
+            filter(token: "HEAT_CLIENT_URL", value: clientHeatUrl)
+            filter(token: "HEAT_SERVICE.USERID", value: heatServiceUserId)
+            filter(token: "HEAT_SERVICE.PASSWORD", value: heatServicePassword)
+            filter(token: "HEAT_SERVICE.PROJECT", value: heatServiceProject)
+            filter(token: "ALLOWED_AUTH_URIS", value: allowedAuthURIs)
+            filter(token: "RPC_THREAD_POOL_SIZE", value: 64)
+            filter(token: "RPC_CONN_POOL_SIZE", value: 30)
+            filter(token: "RPC_RESPONSE_TIMEOUT", value: 60)
+
+            filter(token: "AMQP.HOST", value: amqpHost)
+            filter(token: "AMQP.PORT", value: amqpPort)
+            filter(token: "AMQP.USERID", value: amqpUser)
+            filter(token: "AMQP.PASSWORD", value: amqpPassword)
+
+            // When using Juno, RabbitMQ is the default messaging provider
+            filter(token: "RABBITMQ.USE_SSL", value: false)
+            filter(token: "RABBITMQ.VHOST", value: rabbitmqVirtualHost)
+
+            // When using Icehouse, Qpid is the default messaging provider
+            filter(token: "QPID.PROTOCOL", value: 'tcp')
+        }
+    }
+     if(new File("${System.env.HOME}/clientrc").exists()) {
+         ant.copy(file: file("${System.env.HOME}/clientrc").absolutePath, overwrite: 'true', encoding: "UTF-8",
+              tofile: "${System.env.HOME}/clientrc.backup.${index}")
+     }
+     ant.copy(file: file("engine/templates/heat-config/clientrc").absolutePath, overwrite: 'true', encoding: "UTF-8",
+               tofile: "${System.env.HOME}/clientrc") {
+        filterset {
+          filter(token: "ORCHESTRATION_URL", value: "http://${hostname}:${heatAPIPort}")
+          filter(token: "IDENTITY_URL", value: allowedAuthURIs)
+          filter(token: "ADMIN_PASSWORD", value: adminPassword)
+          }
+     }
+}
+
+task configureHeatDatabaseTables(type: Exec,
+dependsOn: [configureBackendServices,
+            configureMySQLPythonDependencies,
+            configure,
+            installPatternServices]) {
+    executable '/bin/sh'
+    args '-c', "exit 0 ; heat-manage db_sync"
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task installIdentityServices(type:Exec,
+                             dependsOn: [configureMediaRepository, installMessagingBackendServices, installDatabaseBackendServices]) {
+    workingDir = file("${binDir}")
+    executable '/bin/sh'
+    args '-c', 'yum -y --nogpgcheck install keystonemiddleware openstack-keystone python-openstackclient python-keystoneclient openstack-utils'
+    standardOutput = System.out;
+    errorOutput = System.err;
+}
+
+task configureIdentityDatabaseTables(type: Exec,
+                                 dependsOn: [installIdentityServices])  {
+                workingDir = file("${binDir}")
+                executable '/bin/sh'
+                args '-c', "exit 0 ; ${binDir}/configure-identity-database.sh",
+                standardOutput = System.out;
+                errorOutput = System.err;
+}
+
+task configureIdentityService(dependsOn: [
+    configureIdentityDatabaseTables
+]) << {
+
+    def sqlConx = "mysql://keystone:keystone@127.0.0.1:3306/keystone?charset=utf8"
+    def adminToken = UUID.randomUUID().toString()
+    def adminPassword = "openstack1"
+
+    // hostname = java.net.InetAddress.getLocalHost().getHostAddress();
+    File etcDir = new File("/etc/keystone")
+    def index = 1;
+    if(etcDir.exists() && etcDir.canRead()) {
+        File[] heatConfs = etcDir.listFiles(new FileFilter() {
+            public boolean accept(File pathname) {
+                if(pathname.getName().startsWith("keystone.conf")) {
+                    return true;
+                }
+                return false;
+            }
+        })
+        index = heatConfs.length + 1
+    }
+    if(new File("/etc/keystone/keystone.conf").exists()) {
+        ant.copy(file: file("/etc/keystone/keystone.conf").absolutePath, overwrite: 'true', encoding: "UTF-8",
+            tofile: "/etc/keystone/keystone.conf.backup.${index}")
+    }
+    ant.copy(file: file("engine/templates/keystone-config/keystone.conf").absolutePath, overwrite: 'true', encoding: "UTF-8",
+             tofile: "/etc/keystone/keystone.conf") {
+        filterset {
+            filter(token: "SQL_CONNECTION", value: sqlConx)
+            filter(token: "ADMIN_TOKEN", value: adminToken)
+        }
+    }
+    if(new File("${System.env.HOME}/keystonerc").exists()) {
+        ant.copy(file: file("${System.env.HOME}/keystonerc").absolutePath, overwrite: 'true', encoding: "UTF-8",
+            tofile: "${System.env.HOME}/keystonerc.backup.${index}")
+    }
+    ant.copy(file: file("engine/templates/keystone-config/keystonerc").absolutePath, overwrite: 'true', encoding: "UTF-8",
+             tofile: "${System.env.HOME}/keystonerc") {
+        filterset {
+            filter(token: "ADMIN_TOKEN", value: adminToken)
+            filter(token: "ADMIN_PASSWORD", value: adminPassword)
+        }
+    }
+}
+
+
+task createDefaultIdentityTenants(dependsOn: [configureIdentityService, prompt]) << {
+    def publicHostname = System.getProperties().get("install.engine.public.hostname")
+    exec {
+        workingDir = file("${binDir}")
+        executable '/bin/sh'
+        args '-c', "exit 0; ${binDir}/configure-identity-service.sh ${publicHostname}",
+        standardOutput = System.out;
+        errorOutput = System.err;
+    }
+}
+
+task restoreAllowedAuthURIs(dependsOn: [createDefaultIdentityTenants]) << {
+    if(doUpgrade){
+        exec {
+            workingDir = file("${binDir}")
+            executable '/bin/sh'
+            args '-c', "${binDir}/restore-AllowedAuthURIs.sh ${backup_heat_config}",
+            standardOutput = System.out;
+            errorOutput = System.err;
+        }
+    }
+}
+
+task startServices(dependsOn: [restoreAllowedAuthURIs]) << {
+    if(isYes(System.getProperties().get("install.engine.start.services"))) {
+        exec {
+            workingDir = file("${binDir}")
+            executable '/bin/sh'
+            args '-c', "${binDir}/start-services.sh",
+            standardOutput = System.out;
+            errorOutput = System.err;
+        }
+    }
+}
+
+task install(dependsOn: [prompt,
+                         configureHeatDatabaseTables, createDefaultIdentityTenants, restoreAllowedAuthURIs,startServices]) << {
+    def publicHostname = System.getProperties().get("install.engine.public.hostname")
+    println("\n--------------------------------------------------------------------------------")
+    println("If you opted to start the pattern engine services, they are already running."
+            + "\nIf not, you will need to start these services manually before using the engine."
+            + "\nYou may check the status of the pattern engine services from your console using the "
+            + "\nfollowing commands:\n"
+            + "\n\tsystemctl status openstack-heat-engine.service\n"
+            + "\n\tsystemctl status openstack-heat-api.service\n"
+            + "\n\tsystemctl status openstack-heat-api-cfn.service\n"
+            + "\n\tsystemctl status openstack-heat-api-cloudwatch.service\n"
+            + "\nIf you accepted the default values for the OpenStack Identity endpoint, then"
+            + "\nyou can check the status of the OpenStack identity service on this host using:\n"
+            + "\n\tsystemctl status openstack-keystone.service\n"
+            + "\nNOTE: The services for the backend services required by the engine are already"
+            + "\nrunning. You may stop those services if you do not intend to start the pattern"
+            + "\nservices at this time. If you stop these backend services while the pattern "
+            + "\nservices are running, you will cause the pattern services to fail. The following"
+            + "\ncommands will terminate the backend services:\n"
+            + "\n\tsystemctl stop ${AMQP_PROVIDER_DAEMON}.service\n"
+            + "\n\tsystemctl stop  mariadb.service\n"
+            + "\nYou may interact with the local identity service and pattern engine"
+            + "\nusing the prepared credentials files in your user directory:\n"
+            + "\n\tsource ~/clientrc\n"
+            + "\n\topenstack endpoint list\n"
+            + "\n\theat stack-list\n"
+            + "\nAfter starting the pattern services, you may access the REST API at:"
+            + "\n"
+            + "\n\thttp://${publicHostname}:8004")
+    println("\n--------------------------------------------------------------------------------")
+}
+
+// Prevent Gradle from doing whatever it feels like with ordering
+installCloudExtPlugin.shouldRunAfter openstackRelease
+installSwOrchPlugin.shouldRunAfter openstackRelease
+installCloudExtPlugin.mustRunAfter extractPluginArchives
+installSwOrchPlugin.mustRunAfter extractPluginArchives
+configurePluginPythonDependenciesPost.mustRunAfter installCloudExtPlugin
+configurePluginPythonDependenciesPost.mustRunAfter installSwOrchPlugin
+configurePolicies.mustRunAfter patchHeatEngine
+patchStandaloneEngine.shouldRunAfter patchHeatEngine
+

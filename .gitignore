@@ -18,6 +18,5 @@ build.rc
 /dist
 /lib
 /ecbin
-/artifacts
 *.zip
 latest.txt
